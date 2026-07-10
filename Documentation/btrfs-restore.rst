@@ -83,6 +83,20 @@ OPTIONS
 -c
         ignore case (*--path-regex* only)
 
+--chunk-map <file>
+        bootstrap chunk mappings from an external file instead of reading
+        the chunk tree.  This allows restoring files from a filesystem whose
+        SYSTEM chunks were destroyed; see :doc:`btrfs-rescue` section
+        *inject-chunk-tree* for the file format and the recovery workflow.
+        The *BTRFS_CHUNK_MAP* environment variable is a global fallback.
+
+--exclude <substring>
+        skip any path that contains *substring*; may be given multiple
+        times.  Useful for skipping regenerable data (caches, package
+        manager artifacts) during large restores.  The colon-separated
+        *BTRFS_RESTORE_EXCLUDE* environment variable is an alternative
+        source of patterns.
+
 -v|--verbose
         (deprecated) alias for global *-v* option
 

@@ -36,6 +36,57 @@ chunk-recover [options] <device>
    Since :command:`chunk-recover` will scan the whole device, it will be very
    slow especially if executed on a large device.
 
+inject-chunk-tree --chunk-map <file> [options] <device>
+        Rebuild a destroyed chunk tree from the device tree and the extent
+        tree.  This handles the case that :command:`chunk-recover` cannot:
+        all copies of the SYSTEM chunk are unreadable (e.g. a device holding
+        them disappeared), while the rest of the metadata is intact.
+
+        The filesystem is opened by bootstrapping the logical-to-physical
+        chunk mappings from an external *chunk map* file instead of the
+        on-disk chunk tree.  Such a map can be derived from a raw device scan
+        of the surviving metadata block headers; every btrfs metadata block
+        records its own logical address, owner tree, generation and checksum,
+        and the surviving device tree provides the authoritative mapping for
+        all chunks including data.  See *recovery-tools/README.md* in the
+        source repository for the map derivation workflow.
+
+        A new SYSTEM chunk is allocated in unallocated space on a present
+        device, a fresh chunk tree is written into it, and the superblock's
+        *sys_chunk_array* is rebuilt.  All pre-existing SYSTEM chunks are
+        erased; their only content, the old chunk tree, is superseded.
+
+        Without *-y* this is a dry run: the planned rebuild is printed and
+        nothing is written.
+
+        ``Options``
+
+        --chunk-map <file>
+                bootstrap chunk mappings from this file.  Each non-comment
+                line describes one chunk:
+                *logical length type devid physical [devid2 physical2 ...]*
+                (all decimal, *type* is the raw block group flags value).
+                The *BTRFS_CHUNK_MAP* environment variable is a global
+                fallback recognized by all btrfs commands.
+        --degraded
+                keep missing devices: device items are reconstructed from
+                the device tree and chunks with lost stripes are preserved
+                (data on missing devices remains unreadable).  Mount with
+                *-o degraded* afterwards.  The default (without this option)
+                requires every non-SYSTEM chunk to be fully present and
+                removes missing devices entirely, producing a filesystem
+                with no missing-device residue.
+        --sys-size <size>
+                size of the newly allocated SYSTEM chunk (default: 32MiB).
+        -y
+                actually write the rebuild; without it, dry run.
+
+.. note::
+   Chunks using stripe-order-dependent profiles (RAID0/RAID10/RAID5/RAID6)
+   cannot be reconstructed this way because device extents do not record the
+   stripe order.  Mirror profiles (single/DUP/RAID1/RAID1C3/RAID1C4) are
+   fully supported.
+
 fix-device-size <device>
         Fix device size and super block total bytes values that do not match.
 
