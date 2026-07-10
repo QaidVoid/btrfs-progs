@@ -1473,6 +1473,17 @@ int btrfs_setup_chunk_tree_and_device_map(struct btrfs_fs_info *fs_info,
 	if (ret)
 		return ret;
 
+	/* RECOVERY HACK: bypass destroyed chunk tree with an external map */
+	if (getenv("BTRFS_CHUNK_MAP")) {
+		ret = btrfs_inject_chunk_map(fs_info, getenv("BTRFS_CHUNK_MAP"));
+		if (ret)
+			return ret;
+		fs_info->chunk_map_injected = 1;
+		fs_info->ignore_chunk_tree_error = 1;
+		fs_info->chunk_root = NULL;
+		return 0;
+	}
+
 	if (chunk_root_bytenr && !IS_ALIGNED(chunk_root_bytenr,
 					    fs_info->sectorsize)) {
 		warning("chunk_root_bytenr %llu is unaligned to %u, ignore it",
@@ -1653,6 +1664,10 @@ static struct btrfs_fs_info *__open_ctree_fd(int fp, struct open_ctree_args *oca
 
 	fs_info->zoned = 0;
 
+	/* RECOVERY HACK: injected chunk map, no chunk root; go set up roots */
+	if (fs_info->chunk_map_injected)
+		goto setup_roots;
+
 	/* Chunk tree root is unable to read, return directly */
 	if (!fs_info->chunk_root)
 		return fs_info;
@@ -1684,6 +1699,7 @@ static struct btrfs_fs_info *__open_ctree_fd(int fp, struct open_ctree_args *oca
 			   btrfs_header_chunk_tree_uuid(eb),
 			   BTRFS_UUID_SIZE);
 
+setup_roots:
 	ret = btrfs_setup_all_roots(fs_info, oca->root_tree_bytenr, flags);
 	if (ret && !(flags & __OPEN_CTREE_RETURN_CHUNK_ROOT) &&
 	    !fs_info->ignore_chunk_tree_error)

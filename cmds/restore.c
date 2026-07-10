@@ -986,6 +986,37 @@ static int search_dir(struct btrfs_root *root, struct btrfs_key *key,
 		/* full path from root of btrfs being restored */
 		snprintf(fs_name, PATH_MAX, "%s/%s", in_dir, filename);
 
+		/* RECOVERY HACK: skip paths containing any exclude substring */
+		{
+			static char *excl_buf = NULL;
+			static char *excl_list[128];
+			static int excl_n = -1;
+
+			if (excl_n < 0) {
+				const char *e = getenv("BTRFS_RESTORE_EXCLUDE");
+				excl_n = 0;
+				if (e) {
+					char *tok;
+					excl_buf = strdup(e);
+					for (tok = strtok(excl_buf, ":");
+					     tok && excl_n < 128;
+					     tok = strtok(NULL, ":"))
+						excl_list[excl_n++] = tok;
+				}
+			}
+			if (excl_n > 0) {
+				int xi, hit = 0;
+				for (xi = 0; xi < excl_n; xi++) {
+					if (strstr(fs_name, excl_list[xi])) {
+						hit = 1;
+						break;
+					}
+				}
+				if (hit)
+					goto next;
+			}
+		}
+
 		if (mreg && REG_NOMATCH == regexec(mreg, fs_name, 0, NULL, 0))
 			goto next;
 

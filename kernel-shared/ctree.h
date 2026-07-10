@@ -369,6 +369,7 @@ struct btrfs_fs_info {
 	/* Don't verify checksums at all */
 	unsigned int skip_csum_check:1;
 	unsigned int ignore_chunk_tree_error:1;
+	unsigned int chunk_map_injected:1;
 	unsigned int avoid_meta_chunk_alloc:1;
 	unsigned int avoid_sys_chunk_alloc:1;
 	unsigned int finalize_on_close:1;
