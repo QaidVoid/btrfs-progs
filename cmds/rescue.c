@@ -604,12 +604,98 @@ static int cmd_rescue_clear_space_cache(const struct cmd_struct *cmd,
 }
 static DEFINE_SIMPLE_COMMAND(rescue_clear_space_cache, "clear-space-cache");
 
+static const char * const cmd_rescue_inject_chunk_tree_usage[] = {
+	"btrfs rescue inject-chunk-tree --chunk-map FILE [options] <device>",
+	"Rebuild a destroyed chunk tree from the device and extent trees.",
+	"",
+	"The filesystem is opened via chunk-map injection (see --chunk-map),",
+	"a new SYSTEM chunk is allocated in free space on a present device and",
+	"a fresh chunk tree is written there.  All pre-existing SYSTEM chunks",
+	"are erased (their only content, the old chunk tree, is superseded).",
+	"Without -y this is a dry run.",
+	"",
+	OPTLINE("--chunk-map FILE", "logical->physical bootstrap mappings "
+		"(also: BTRFS_CHUNK_MAP environment variable)"),
+	OPTLINE("--degraded", "keep missing devices and partially-lost chunks "
+		"(mount with -o degraded afterwards); default is to require "
+		"all non-SYSTEM chunks intact and drop missing devices"),
+	OPTLINE("--sys-size SIZE", "size of the new SYSTEM chunk (default 32M)"),
+	OPTLINE("-y", "actually write; without it, dry run"),
+	NULL
+};
+
+static int cmd_rescue_inject_chunk_tree(const struct cmd_struct *cmd,
+					int argc, char *argv[])
+{
+	int ret = 0;
+	char *file;
+	const char *chunk_map = NULL;
+	u64 sys_size = 0;
+	int degraded = 0;
+	int yes = 0;
+
+	optind = 0;
+	while (1) {
+		int c;
+		enum { GETOPT_VAL_CHUNK_MAP = GETOPT_VAL_FIRST,
+		       GETOPT_VAL_DEGRADED, GETOPT_VAL_SYS_SIZE };
+		static const struct option long_options[] = {
+			{ "chunk-map", required_argument, NULL,
+				GETOPT_VAL_CHUNK_MAP },
+			{ "degraded", no_argument, NULL, GETOPT_VAL_DEGRADED },
+			{ "sys-size", required_argument, NULL,
+				GETOPT_VAL_SYS_SIZE },
+			{ NULL, 0, NULL, 0 }
+		};
+
+		c = getopt_long(argc, argv, "y", long_options, NULL);
+		if (c < 0)
+			break;
+		switch (c) {
+		case GETOPT_VAL_CHUNK_MAP:
+			chunk_map = optarg;
+			break;
+		case GETOPT_VAL_DEGRADED:
+			degraded = 1;
+			break;
+		case GETOPT_VAL_SYS_SIZE:
+			sys_size = arg_strtou64_with_suffix(optarg);
+			break;
+		case 'y':
+			yes = 1;
+			break;
+		default:
+			usage_unknown_option(cmd, argv);
+		}
+	}
+
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	file = argv[optind];
+	ret = check_mounted(file);
+	if (ret < 0) {
+		errno = -ret;
+		error("could not check mount status: %m");
+		return 1;
+	} else if (ret) {
+		error("the device is busy");
+		return 1;
+	}
+
+	ret = btrfs_rescue_inject_chunk_tree(file, chunk_map, degraded,
+					     sys_size, yes);
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(rescue_inject_chunk_tree, "inject-chunk-tree");
+
 static const char rescue_cmd_group_info[] =
 "toolbox for specific rescue operations";
 
 static const struct cmd_group rescue_cmd_group = {
 	rescue_cmd_group_usage, rescue_cmd_group_info, {
 		&cmd_struct_rescue_chunk_recover,
+		&cmd_struct_rescue_inject_chunk_tree,
 		&cmd_struct_rescue_super_recover,
 		&cmd_struct_rescue_zero_log,
 		&cmd_struct_rescue_fix_device_size,

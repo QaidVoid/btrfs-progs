@@ -29,6 +29,8 @@ enum btrfs_fix_data_checksum_mode {
 
 int btrfs_recover_superblocks(const char *path, int yes);
 int btrfs_recover_chunk_tree(const char *path, int yes);
+int btrfs_rescue_inject_chunk_tree(const char *path, const char *chunk_map,
+				   int degraded, u64 sys_size, int yes);
 int btrfs_recover_fix_data_checksum(const char *path, enum btrfs_fix_data_checksum_mode mode,
 				    unsigned int mirror);
 
