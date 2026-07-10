@@ -604,12 +604,62 @@ static int cmd_rescue_clear_space_cache(const struct cmd_struct *cmd,
 }
 static DEFINE_SIMPLE_COMMAND(rescue_clear_space_cache, "clear-space-cache");
 
+static const char * const cmd_rescue_inject_chunk_tree_usage[] = {
+	"btrfs rescue inject-chunk-tree [-y] <device>",
+	"RECOVERY HACK: rebuild chunk tree from dev/extent trees (needs BTRFS_CHUNK_MAP)",
+	"",
+	OPTLINE("-y", "assume an answer of `yes' to all questions"),
+	NULL
+};
+
+static int cmd_rescue_inject_chunk_tree(const struct cmd_struct *cmd,
+					int argc, char *argv[])
+{
+	int ret = 0;
+	char *file;
+	int yes = 0;
+
+	optind = 0;
+	while (1) {
+		int c = getopt(argc, argv, "y");
+
+		if (c < 0)
+			break;
+		switch (c) {
+		case 'y':
+			yes = 1;
+			break;
+		default:
+			usage_unknown_option(cmd, argv);
+		}
+	}
+
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	file = argv[optind];
+	ret = check_mounted(file);
+	if (ret < 0) {
+		errno = -ret;
+		error("could not check mount status: %m");
+		return 1;
+	} else if (ret) {
+		error("the device is busy");
+		return 1;
+	}
+
+	ret = btrfs_rescue_inject_chunk_tree(file, yes);
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(rescue_inject_chunk_tree, "inject-chunk-tree");
+
 static const char rescue_cmd_group_info[] =
 "toolbox for specific rescue operations";
 
 static const struct cmd_group rescue_cmd_group = {
 	rescue_cmd_group_usage, rescue_cmd_group_info, {
 		&cmd_struct_rescue_chunk_recover,
+		&cmd_struct_rescue_inject_chunk_tree,
 		&cmd_struct_rescue_super_recover,
 		&cmd_struct_rescue_zero_log,
 		&cmd_struct_rescue_fix_device_size,
