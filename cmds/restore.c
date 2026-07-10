@@ -906,6 +906,47 @@ out:
 	return ret;
 }
 
+static const char *opt_chunk_map;
+
+/* path exclusion: --exclude options + BTRFS_RESTORE_EXCLUDE env var */
+#define EXCL_MAX 128
+static const char *excl_list[EXCL_MAX];
+static int excl_n;
+
+static int excl_add(const char *pattern)
+{
+	if (excl_n >= EXCL_MAX) {
+		warning("too many --exclude patterns (max %d), ignoring: %s",
+			EXCL_MAX, pattern);
+		return -1;
+	}
+	excl_list[excl_n++] = pattern;
+	return 0;
+}
+
+static void excl_init_from_env(void)
+{
+	const char *e = getenv("BTRFS_RESTORE_EXCLUDE");
+	char *buf, *tok;
+
+	if (!e)
+		return;
+	buf = strdup(e);
+	for (tok = strtok(buf, ":"); tok; tok = strtok(NULL, ":"))
+		excl_add(tok);
+	/* buf intentionally kept: excl_list points into it */
+}
+
+static int excl_match(const char *path)
+{
+	int i;
+
+	for (i = 0; i < excl_n; i++)
+		if (strstr(path, excl_list[i]))
+			return 1;
+	return 0;
+}
+
 static int search_dir(struct btrfs_root *root, struct btrfs_key *key,
 		      const char *output_rootdir, const char *in_dir,
 		      const regex_t *mreg)
@@ -990,6 +1031,13 @@ static int search_dir(struct btrfs_root *root, struct btrfs_key *key,
 			error("invalid file path %s/%s", in_dir, filename);
 			goto out;
 		}
+
+		/*
+		 * Skip paths containing any exclude substring (--exclude
+		 * and/or colon-separated BTRFS_RESTORE_EXCLUDE env var).
+		 */
+		if (excl_match(fs_name))
+			goto next;
 
 		if (mreg && REG_NOMATCH == regexec(mreg, fs_name, 0, NULL, 0))
 			goto next;
@@ -1234,6 +1282,7 @@ static struct btrfs_root *open_fs(const char *dev, u64 root_location,
 		oca.filename = dev;
 		oca.sb_bytenr = bytenr;
 		oca.root_tree_bytenr = root_location;
+		oca.chunk_map = opt_chunk_map;
 		oca.flags = OPEN_CTREE_PARTIAL | OPEN_CTREE_NO_BLOCK_GROUPS |
 			    OPEN_CTREE_ALLOW_TRANSID_MISMATCH;
 		fs_info = open_ctree_fs_info(&oca);
@@ -1376,6 +1425,10 @@ static const char * const cmd_restore_usage[] = {
 	OPTLINE("-u, --super NUMBER", "super mirror"),
 	"",
 	"Other:",
+	OPTLINE("--chunk-map FILE", "bootstrap chunk mappings from FILE instead "
+		"of the chunk tree (recovery; also: BTRFS_CHUNK_MAP env var)"),
+	OPTLINE("--exclude SUBSTR", "skip any path containing SUBSTR; repeatable "
+		"(also: colon-separated BTRFS_RESTORE_EXCLUDE env var)"),
 	OPTLINE("-v, --verbose", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
@@ -1412,10 +1465,15 @@ static int cmd_restore(const struct cmd_struct *cmd, int argc, char **argv)
 	optind = 0;
 	while (1) {
 		int opt;
-		enum { GETOPT_VAL_PATH_REGEX = GETOPT_VAL_FIRST };
+		enum { GETOPT_VAL_PATH_REGEX = GETOPT_VAL_FIRST,
+		       GETOPT_VAL_CHUNK_MAP, GETOPT_VAL_EXCLUDE };
 		static const struct option long_options[] = {
 			{ "path-regex", required_argument, NULL,
 				GETOPT_VAL_PATH_REGEX },
+			{ "chunk-map", required_argument, NULL,
+				GETOPT_VAL_CHUNK_MAP },
+			{ "exclude", required_argument, NULL,
+				GETOPT_VAL_EXCLUDE },
 			{ "dry-run", no_argument, NULL, 'D'},
 			{ "metadata", no_argument, NULL, 'm'},
 			{ "symlinks", no_argument, NULL, 'S'},
@@ -1491,6 +1549,12 @@ static int cmd_restore(const struct cmd_struct *cmd, int argc, char **argv)
 			case GETOPT_VAL_PATH_REGEX:
 				match_regstr = optarg;
 				break;
+			case GETOPT_VAL_CHUNK_MAP:
+				opt_chunk_map = optarg;
+				break;
+			case GETOPT_VAL_EXCLUDE:
+				excl_add(optarg);
+				break;
 			case 'x':
 				get_xattrs = 1;
 				break;
@@ -1550,6 +1614,8 @@ static int cmd_restore(const struct cmd_struct *cmd, int argc, char **argv)
 	while (len && dir_name[--len] == '/') {
 		dir_name[len] = '\0';
 	}
+
+	excl_init_from_env();
 
 	if (root_objectid != 0) {
 		struct btrfs_root *orig_root = root;
