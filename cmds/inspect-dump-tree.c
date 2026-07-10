@@ -280,6 +280,7 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	struct btrfs_key found_key;
 	struct cache_tree block_root;	/* for multiple --block parameters */
 	struct open_ctree_args oca = { 0 };
+	const char *opt_chunk_map = NULL;
 	char uuidbuf[BTRFS_UUID_UNPARSED_SIZE];
 	int ret = 0;
 	int slot;
@@ -315,7 +316,7 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 		enum { GETOPT_VAL_FOLLOW = GETOPT_VAL_FIRST, GETOPT_VAL_DFS,
 			GETOPT_VAL_BFS,
 		       GETOPT_VAL_NOSCAN, GETOPT_VAL_HIDE_NAMES,
-		       GETOPT_VAL_CSUM_HEADERS, GETOPT_VAL_CSUM_ITEMS,
+		       GETOPT_VAL_CSUM_HEADERS, GETOPT_VAL_CSUM_ITEMS, GETOPT_VAL_CHUNK_MAP,
 		};
 		static const struct option long_options[] = {
 			{ "extents", no_argument, NULL, 'e'},
@@ -326,6 +327,7 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 			{ "block", required_argument, NULL, 'b'},
 			{ "tree", required_argument, NULL, 't'},
 			{ "follow", no_argument, NULL, GETOPT_VAL_FOLLOW },
+			{ "chunk-map", required_argument, NULL, GETOPT_VAL_CHUNK_MAP },
 			{ "bfs", no_argument, NULL, GETOPT_VAL_BFS },
 			{ "dfs", no_argument, NULL, GETOPT_VAL_DFS },
 			{ "noscan", no_argument, NULL, GETOPT_VAL_NOSCAN },
@@ -373,6 +375,9 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 				return 1;
 			}
 			break;
+		case GETOPT_VAL_CHUNK_MAP:
+			opt_chunk_map = optarg;
+			break;
 		case GETOPT_VAL_FOLLOW:
 			follow = BTRFS_PRINT_TREE_FOLLOW;
 			break;
@@ -409,6 +414,7 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	pr_default("%s\n", PACKAGE_STRING);
 
 	oca.filename = argv[optind];
+	oca.chunk_map = opt_chunk_map;
 	info = open_ctree_fs_info(&oca);
 	if (!info) {
 		error("unable to open %s", argv[optind]);

@@ -10615,6 +10615,7 @@ static int cmd_check(const struct cmd_struct *cmd, int argc, char **argv)
 	struct cache_tree root_cache;
 	struct btrfs_root *root = NULL;
 	struct open_ctree_args oca = { 0 };
+	const char *opt_chunk_map = NULL;
 	u64 bytenr = 0;
 	u64 subvolid = 0;
 	u64 tree_root_bytenr = 0;
@@ -10640,7 +10641,8 @@ static int cmd_check(const struct cmd_struct *cmd, int argc, char **argv)
 			GETOPT_VAL_INIT_EXTENT, GETOPT_VAL_CHECK_CSUM,
 			GETOPT_VAL_READONLY, GETOPT_VAL_CHUNK_TREE,
 			GETOPT_VAL_MODE, GETOPT_VAL_CLEAR_SPACE_CACHE,
-			GETOPT_VAL_FORCE, GETOPT_VAL_SKIP_QGROUP_ACCOUNTING };
+			GETOPT_VAL_FORCE, GETOPT_VAL_SKIP_QGROUP_ACCOUNTING,
+			GETOPT_VAL_CHUNK_MAP };
 		static const struct option long_options[] = {
 			{ "super", required_argument, NULL, 's' },
 			{ "repair", no_argument, NULL, GETOPT_VAL_REPAIR },
@@ -10665,6 +10667,7 @@ static int cmd_check(const struct cmd_struct *cmd, int argc, char **argv)
 			{ "clear-space-cache", required_argument, NULL,
 				GETOPT_VAL_CLEAR_SPACE_CACHE},
 			{ "force", no_argument, NULL, GETOPT_VAL_FORCE },
+			{ "chunk-map", required_argument, NULL, GETOPT_VAL_CHUNK_MAP },
 			{ NULL, 0, NULL, 0}
 		};
 
@@ -10747,6 +10750,9 @@ static int cmd_check(const struct cmd_struct *cmd, int argc, char **argv)
 					exit(1);
 				}
 				ctree_flags |= OPEN_CTREE_WRITES;
+				break;
+			case GETOPT_VAL_CHUNK_MAP:
+				opt_chunk_map = optarg;
 				break;
 			case GETOPT_VAL_FORCE:
 				force = true;
@@ -10836,6 +10842,7 @@ static int cmd_check(const struct cmd_struct *cmd, int argc, char **argv)
 		ctree_flags |= OPEN_CTREE_PARTIAL;
 
 	oca.filename = argv[optind];
+	oca.chunk_map = opt_chunk_map;
 	oca.sb_bytenr = bytenr;
 	oca.root_tree_bytenr = tree_root_bytenr;
 	oca.chunk_tree_bytenr = chunk_root_bytenr;
