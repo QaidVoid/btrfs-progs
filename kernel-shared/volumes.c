@@ -2503,6 +2503,83 @@ static struct btrfs_device *fill_missing_device(u64 devid, const u8 *uuid)
 }
 
 /*
+ * RECOVERY HACK: load a logical->physical chunk map from a text file instead
+ * of reading the (destroyed) chunk tree.  Each non-comment line:
+ *   logical length type devid physical [devid2 physical2]
+ * (all decimal; type is the raw BTRFS_BLOCK_GROUP_* flags value)
+ */
+int btrfs_inject_chunk_map(struct btrfs_fs_info *fs_info, const char *path)
+{
+	struct btrfs_mapping_tree *map_tree = &fs_info->mapping_tree;
+	FILE *f;
+	char line[512];
+	int count = 0;
+
+	f = fopen(path, "r");
+	if (!f) {
+		error("chunk-map: cannot open %s", path);
+		return -EIO;
+	}
+	while (fgets(line, sizeof(line), f)) {
+		unsigned long long logical, length, type;
+		unsigned long long devids[2] = {0, 0}, physs[2] = {0, 0};
+		struct map_lookup *map;
+		int nf, num_stripes, i, ret;
+
+		if (line[0] == '#' || line[0] == '\n')
+			continue;
+		nf = sscanf(line, "%llu %llu %llu %llu %llu %llu %llu",
+			    &logical, &length, &type,
+			    &devids[0], &physs[0], &devids[1], &physs[1]);
+		if (nf < 5) {
+			warning("chunk-map: skipping malformed line: %s", line);
+			continue;
+		}
+		num_stripes = (nf >= 7) ? 2 : 1;
+
+		map = kmalloc(btrfs_map_lookup_size(num_stripes), GFP_NOFS);
+		if (!map) {
+			fclose(f);
+			return -ENOMEM;
+		}
+		map->ce.start = logical;
+		map->ce.size = length;
+		map->num_stripes = num_stripes;
+		map->io_width = BTRFS_STRIPE_LEN;
+		map->io_align = BTRFS_STRIPE_LEN;
+		map->sector_size = fs_info->sectorsize;
+		map->stripe_len = BTRFS_STRIPE_LEN;
+		map->type = type;
+		map->sub_stripes = 1;
+		for (i = 0; i < num_stripes; i++) {
+			map->stripes[i].physical = physs[i];
+			map->stripes[i].dev = btrfs_find_device(fs_info,
+							devids[i], NULL, NULL);
+			if (!map->stripes[i].dev) {
+				error("chunk-map: devid %llu not present (logical %llu)",
+				      devids[i], logical);
+				kfree(map);
+				map = NULL;
+				break;
+			}
+		}
+		if (!map)
+			continue;
+		ret = insert_cache_extent(&map_tree->cache_tree, &map->ce);
+		if (ret) {
+			warning("chunk-map: cannot insert logical %llu (%d), skipped",
+				logical, ret);
+			kfree(map);
+			continue;
+		}
+		count++;
+	}
+	fclose(f);
+	printf("chunk-map: injected %d chunk mappings from %s\n", count, path);
+	return count > 0 ? 0 : -EINVAL;
+}
+
+/*
  * Slot is used to verify the chunk item is valid
  *
  * For sys chunk in superblock, pass -1 to indicate sys chunk.

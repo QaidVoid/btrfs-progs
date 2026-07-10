@@ -189,6 +189,14 @@ struct open_ctree_args {
 	u64 root_tree_bytenr;
 	u64 chunk_tree_bytenr;
 	unsigned flags;
+	/*
+	 * Optional path to a chunk map file: logical->physical mappings used
+	 * instead of reading the chunk tree (recovery of filesystems whose
+	 * SYSTEM chunks are lost).  Format: one mapping per line,
+	 *   logical length type devid physical [devid2 physical2 ...]
+	 * The BTRFS_CHUNK_MAP environment variable is a global fallback.
+	 */
+	const char *chunk_map;
 };
 
 struct btrfs_fs_info *open_ctree_fs_info(struct open_ctree_args *oca);

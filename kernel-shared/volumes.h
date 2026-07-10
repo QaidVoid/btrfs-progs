@@ -278,6 +278,7 @@ int btrfs_rmap_block(struct btrfs_fs_info *fs_info,
 		     int *naddrs, int *stripe_len);
 int btrfs_read_sys_array(struct btrfs_fs_info *fs_info);
 int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info);
+int btrfs_inject_chunk_map(struct btrfs_fs_info *fs_info, const char *path);
 int btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 		      struct btrfs_fs_info *fs_info, u64 *start,
 		      u64 *num_bytes, u64 type);
