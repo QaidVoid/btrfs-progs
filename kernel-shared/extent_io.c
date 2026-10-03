@@ -43,7 +43,7 @@ static void free_extent_buffer_final(struct extent_buffer *eb);
 
 void extent_buffer_init_cache(struct btrfs_fs_info *fs_info)
 {
-	fs_info->max_cache_size = total_memory() / 4;
+	fs_info->max_cache_size = total_memory() / 16;
 	fs_info->cache_size = 0;
 	INIT_LIST_HEAD(&fs_info->lru);
 }
