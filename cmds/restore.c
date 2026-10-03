@@ -197,16 +197,29 @@ static int decompress_zstd(const char *inbuf, char *outbuf, u64 compress_len,
 		goto out;
 	}
 
-	zret = ZSTD_decompressStream(strm, &out, &in);
-	if (ZSTD_isError(zret)) {
-		error("zstd decompress failed %s", ZSTD_getErrorName(zret));
-		ret = -1;
-		goto out;
-	}
+	do {
+		size_t in_pos = in.pos, out_pos = out.pos;
+
+		zret = ZSTD_decompressStream(strm, &out, &in);
+		if (ZSTD_isError(zret)) {
+			error("zstd decompress failed %s", ZSTD_getErrorName(zret));
+			ret = -1;
+			goto out;
+		}
+		if (in.pos == in_pos && out.pos == out_pos)
+			break;
+	} while (zret != 0);
+
 	if (zret != 0) {
-		error("zstd frame incomplete");
-		ret = -1;
-		goto out;
+		if (out.pos == out.size) {
+			warning("zstd frame not finished but output is complete (in %zu/%zu)",
+				in.pos, in.size);
+		} else {
+			error("zstd frame incomplete (in %zu/%zu, out %zu/%zu)",
+			      in.pos, in.size, out.pos, out.size);
+			ret = -1;
+			goto out;
+		}
 	}
 
 out:
